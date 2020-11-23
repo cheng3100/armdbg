@@ -1,0 +1,5 @@
+*.swp
+tags
+build/
+*.ioc
+.mxproject
