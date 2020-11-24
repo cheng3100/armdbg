@@ -25,6 +25,19 @@
 /* USER CODE END 0 */
 
 UART_HandleTypeDef huart1;
+uint8_t uart1_buf[4];
+
+static void uart_start_receive(void)
+{
+  HAL_UART_Receive_IT(&huart1, &uart1_buf[0], sizeof(uint8_t));
+}
+
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
+{
+	uart_byte_received_cb(&uart1_buf[0], huart->RxXferSize);
+	// start next receive
+	uart_start_receive();
+}
 
 /* USART1 init function */
 
@@ -44,6 +57,9 @@ void MX_USART1_UART_Init(void)
     Error_Handler();
   }
 
+  // start uart receive, buf size must set to 1 byte because there are no
+  // time out in asyn uart mode in the HAL lib.
+  uart_start_receive();
 }
 
 void HAL_UART_MspInit(UART_HandleTypeDef* uartHandle)

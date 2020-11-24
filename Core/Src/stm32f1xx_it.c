@@ -21,6 +21,8 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "stm32f1xx_it.h"
+#include "shell.h"
+#include "fpb.h"
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 /* USER CODE END Includes */
@@ -152,13 +154,125 @@ void SVC_Handler(void)
   /* USER CODE END SVCall_IRQn 1 */
 }
 
+typedef struct __attribute__((packed)) ContextStateFrame {
+  uint32_t r0;
+  uint32_t r1;
+  uint32_t r2;
+  uint32_t r3;
+  uint32_t r12;
+  uint32_t lr;
+  uint32_t return_address;
+  uint32_t xpsr;
+} sContextStateFrame;
+
+typedef enum {
+  kDebugState_None,
+  kDebugState_SingleStep,
+} eDebugState;
+
+static eDebugState s_user_requested_debug_state = kDebugState_None;
+
+void debug_monitor_handler_c(sContextStateFrame *frame) {
+  volatile uint32_t *demcr = (uint32_t *)0xE000EDFC;
+
+  volatile uint32_t *dfsr = (uint32_t *)0xE000ED30;
+  const uint32_t dfsr_dwt_evt_bitmask = (1 << 2);
+  const uint32_t dfsr_bkpt_evt_bitmask = (1 << 1);
+  const uint32_t dfsr_halt_evt_bitmask = (1 << 0);
+  const bool is_dwt_dbg_evt = (*dfsr & dfsr_dwt_evt_bitmask);
+  const bool is_bkpt_dbg_evt = (*dfsr & dfsr_bkpt_evt_bitmask);
+  const bool is_halt_dbg_evt = (*dfsr & dfsr_halt_evt_bitmask);
+
+  logp("DebugMonitor Exception");
+
+  logp("DEMCR: 0x%08x", *demcr);
+  logp("DFSR:  0x%08x (bkpt=%d, halt=%d, dwt=%d)", *dfsr,
+              (int)is_bkpt_dbg_evt, (int)is_halt_dbg_evt,
+              (int)is_dwt_dbg_evt);
+
+  logp("Register Dump");
+  logp(" r0  =0x%08x", frame->r0);
+  logp(" r1  =0x%08x", frame->r1);
+  logp(" r2  =0x%08x", frame->r2);
+  logp(" r3  =0x%08x", frame->r3);
+  logp(" r12 =0x%08x", frame->r12);
+  logp(" lr  =0x%08x", frame->lr);
+  logp(" pc  =0x%08x", frame->return_address);
+  logp(" xpsr=0x%08x", frame->xpsr);
+
+  if (is_dwt_dbg_evt || is_bkpt_dbg_evt ||
+      (s_user_requested_debug_state == kDebugState_SingleStep))  {
+    logp("Debug Event Detected, Awaiting 'c' or 's'");
+    while (1) {
+      char c;
+      if (!shell_port_getchar(&c)) {
+        continue;
+      }
+
+      logp("Got char '%c'!\n", c);
+      if (c == 'c') { // 'c' == 'continue'
+        s_user_requested_debug_state = kDebugState_None;
+        break;
+      } else if (c == 's') { // 's' == 'single step'
+        s_user_requested_debug_state = kDebugState_SingleStep;
+        break;
+      }
+    }
+  } else {
+    logp("Resuming ...");
+  }
+
+  const uint32_t demcr_single_step_mask = (1 << 18);
+
+  if (is_bkpt_dbg_evt) {
+    const uint16_t instruction = *(uint16_t*)frame->return_address;
+    if ((instruction & 0xff00) == 0xbe00) {
+      // advance past breakpoint instruction
+      frame->return_address += sizeof(instruction);
+    } else {
+      // It's a FPB generated breakpoint
+      // We need to disable the FPB and single-step
+      fpb_disable();
+      logp("Single-Stepping over FPB at 0x%x", frame->return_address);
+    }
+
+    // single-step to the next instruction
+    // This will cause a DebugMonitor interrupt to fire
+    // once we return from the exception and a single
+    // instruction has been executed. The HALTED bit
+    // will be set in the DFSR when this happens.
+    *demcr |= (demcr_single_step_mask);
+    // We have serviced the breakpoint event so clear mask
+    *dfsr = dfsr_bkpt_evt_bitmask;
+  } else if (is_halt_dbg_evt) {
+    // re-enable FPB in case we got here via single-step
+    // for a BKPT debug event
+    fpb_enable();
+
+    if (s_user_requested_debug_state != kDebugState_SingleStep) {
+      *demcr &= ~(demcr_single_step_mask);
+    }
+
+    // We have serviced the single step event so clear mask
+    *dfsr = dfsr_halt_evt_bitmask;
+  } else if (is_dwt_dbg_evt) {
+    // Future exercise: handle DWT debug events
+    *dfsr = dfsr_dwt_evt_bitmask;
+  }
+}
 /**
   * @brief This function handles Debug monitor.
   */
+__attribute__((naked))
 void DebugMon_Handler(void)
 {
   /* USER CODE BEGIN DebugMonitor_IRQn 0 */
-
+  __asm volatile(
+      "tst lr, #4 \n"
+      "ite eq \n"
+      "mrseq r0, msp \n"
+      "mrsne r0, psp \n"
+      "b debug_monitor_handler_c \n");
   /* USER CODE END DebugMonitor_IRQn 0 */
   /* USER CODE BEGIN DebugMonitor_IRQn 1 */
 

@@ -21,6 +21,7 @@
 #include "main.h"
 #include "usart.h"
 #include "gpio.h"
+#include "shell.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -55,6 +56,17 @@ void SystemClock_Config(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+__attribute__((noinline))
+static void prv_enable_vfp( void ){
+  __asm volatile
+      (
+          "ldr.w r0, =0xE000ED88      \n" /* The FPU enable bits are in the CPACR. */
+          "ldr r1, [r0]               \n"
+          "orr r1, r1, #( 0xf << 20 ) \n" /* Enable CP10 and CP11 coprocessors, then save back. */
+          "str r1, [r0]               \n"
+          "bx r14                      "
+       );
+}
 
 /* USER CODE END 0 */
 
@@ -88,18 +100,14 @@ int main(void)
   MX_GPIO_Init();
   MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
-
+  prv_enable_vfp();
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  while (1)
-  {
-    /* USER CODE END WHILE */
+  logp("==Booted==");
 
-    /* USER CODE BEGIN 3 */
-  }
-  /* USER CODE END 3 */
+  shell_processing_loop();
 }
 
 /**
