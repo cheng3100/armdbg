@@ -8,6 +8,7 @@ extern "C" {
 /* Includes ------------------------------------------------------------------*/
 #include <stdarg.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <stddef.h>
 #include <stdbool.h>
 #include <stddef.h>

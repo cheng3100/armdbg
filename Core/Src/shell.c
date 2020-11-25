@@ -1,5 +1,7 @@
 #include "usart.h"
 #include "shell.h"
+#include "dummy.h"
+#include "dbg.h"
 
 #define SHELL_RX_BUFFER_SIZE (256)
 #define SHELL_MAX_ARGS (16)
@@ -13,47 +15,31 @@
     command < &g_shell_commands[g_num_shell_commands]; \
     ++command)
 
-static void prv_enable(bool do_enable) {
-  volatile uint32_t *demcr = (uint32_t *)0xE000EDFC;
-  const uint32_t mon_en_bit = 16;
-  if (do_enable) {
-    // clear any stale state in the DFSR
-    volatile uint32_t *dfsr = (uint32_t*)0xE000ED30;
-    *dfsr = *dfsr;
-    *demcr |= 1 << mon_en_bit;
-  } else {
-    *demcr &= ~(1 << mon_en_bit);
+
+static int prv_issue_breakpoint(int argc, char *argv[]) {
+  __asm("bkpt 1");
+  return 0;
+}
+
+static int prv_dump_fpb_config(int argc, char *argv[]) {
+  fpb_dump_breakpoint_config();
+  return 0;
+}
+
+static int prv_fpb_set_breakpoint(int argc, char *argv[]) {
+  if (argc < 3) {
+    logp("Expected [Comp Id] [Address]");
+    return -1;
   }
-}
 
-static bool prv_halting_debug_enabled(void) {
-  volatile uint32_t *dhcsr = (uint32_t *)0xE000EDF0;
-  return (((*dhcsr) & 0x1) != 0);
-}
+  size_t comp_id = strtoul(argv[1], NULL, 0x0);
+  uint32_t addr = strtoul(argv[2], NULL, 0x0);
 
-bool debug_monitor_enable(void) {
-	// the halting debug bit can only be unset by gdb
-  if (prv_halting_debug_enabled()) {
-    logp("Halting Debug Enabled - " \
-                "Can't Enable Monitor Mode Debug!");
-	return false;
-  }
-  prv_enable(true);
+  bool success = fpb_set_breakpoint(comp_id, addr);
+  logp("Set breakpoint on address 0x%x in FP_COMP[%d] %s", addr,
+              (int)comp_id, success ? "Succeeded" : "Failed");
 
-
-  // Priority for DebugMonitor Exception is bits[7:0].
-  // We will use the lowest priority so other ISRs can
-  // fire while in the DebugMonitor Interrupt
-  volatile uint32_t *shpr3 = (uint32_t *)0xE000ED20;
-  *shpr3 = 0xff;
-
-  logp("Monitor Mode Debug Enabled!");
-  return true;
-}
-
-bool debug_monitor_disable(void) {
-  prv_enable(false);
-  return true;
+  return success ? 0 : -1;
 }
 
 static int prv_debug_monitor_enable(int argc, char *argv[]) {
@@ -61,18 +47,31 @@ static int prv_debug_monitor_enable(int argc, char *argv[]) {
   return 0;
 }
 
-static int prv_issue_breakpoint(int argc, char *argv[]) {
-  __asm("bkpt 1");
+static int prv_call_dummy_funcs(int argc, char *argv[]) {
+  for (size_t i = 0; i < dummy_num; i++) {
+    s_dummy_funcs[i].func();
+  }
+  return 0;
+}
+
+static int prv_dump_dummy_funcs(int argc, char *argv[]) {
+  for (size_t i = 0; i < dummy_num; i++) {
+    const sDummyFunction *d = &s_dummy_funcs[i];
+    // physical address is function address with thumb bit removed
+    volatile uint32_t *addr = (uint32_t *)(((uint32_t)d->func) & ~0x1);
+    logp("%s: Starts at 0x%x. First Instruction = 0x%x", d->name, addr, *addr);
+  }
+
   return 0;
 }
 
 static const sShellCommand s_shell_commands[] = {
   {"bkpt", prv_issue_breakpoint, "Issue a Breakpoint Instruction" },
   {"debug_mon_en", prv_debug_monitor_enable, "Enable Monitor Debug Mode" },
-  /** {"fpb_dump", prv_dump_fpb_config, "Dump Active FPB Settings"}, */
-  /** {"fpb_set_breakpoint", prv_fpb_set_breakpoint, "Set Breakpoint [Comp Id] [Address]"}, */
-  /** {"call_dummy_funcs", prv_call_dummy_funcs, "Invoke dummy functions"}, */
-  /** {"dump_dummy_funcs", prv_dump_dummy_funcs, "Print first instruction of each dummy function"}, */
+  {"fpb_dump", prv_dump_fpb_config, "Dump Active FPB Settings"},
+  {"fpb_set_breakpoint", prv_fpb_set_breakpoint, "Set Breakpoint [Comp Id] [Address]"},
+  {"call_dummy_funcs", prv_call_dummy_funcs, "Invoke dummy functions"},
+  {"dump_dummy_funcs", prv_dump_dummy_funcs, "Print first instruction of each dummy function"},
   {"help", shell_help_handler, "Lists all commands"},
 };
 
