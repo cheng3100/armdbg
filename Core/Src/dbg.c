@@ -3,6 +3,7 @@
 #include <stddef.h>
 #include "dbg.h"
 #include "shell.h"
+#include "console.h"
 
 static sFpbUnit *const FPB = (sFpbUnit *)0xE0002000;
 
@@ -41,7 +42,7 @@ void debug_monitor_handler_c(sContextStateFrame *frame) {
     logp("Debug Event Detected, Awaiting 'c' or 's'");
     while (1) {
       char c;
-      if (!shell_port_getchar(&c)) {
+      if (!shell_getchar(&c)) {
         continue;
       }
 

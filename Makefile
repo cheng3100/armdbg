@@ -65,9 +65,11 @@ Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_uart.c \
 Core/Src/gpio.c \
 Core/Src/usart.c \
 Core/Src/dbg.c  \
-Core/Src/dummy.c
+Core/Src/dummy.c \
+Core/Src/shell_cmd.c
 
-C_SOURCES += Core/Src/shell.c
+C_SOURCES += Core/Src/shell.c \
+			 Core/Src/console.c
 
 # ASM sources
 ASM_SOURCES =  \
@@ -195,8 +197,11 @@ $(BUILD_DIR)/%.asm: $(BUILD_DIR)/%.elf | $(BUILD_DIR)
 $(BUILD_DIR):
 	mkdir $@		
 
-gdb: $(TARGET_ELF)
+gdb-flash: $(TARGET_ELF)
 	arm-none-eabi-gdb --eval-command="target remote localhost:3333"  --ex="mon reset" --ex="load"  --se=$(TARGET_ELF)
+
+gdb-client: $(TARGET_ELF)
+	arm-none-eabi-gdb --eval-command="target remote localhost:3333" --ex="load" --se=$(TARGET_ELF)
 
 gdbserver: 
 	pyocd gdbserver -t stm32f103rc

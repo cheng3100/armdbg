@@ -22,6 +22,7 @@
 #include "usart.h"
 #include "gpio.h"
 #include "shell.h"
+#include "console.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */

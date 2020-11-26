@@ -2,81 +2,14 @@
 #include "shell.h"
 #include "dummy.h"
 #include "dbg.h"
+#include "console.h"
+#include "shell_cmd.h"
 
 #define SHELL_RX_BUFFER_SIZE (256)
 #define SHELL_MAX_ARGS (16)
 #define SHELL_PROMPT "shell> "
 
 
-#define ARRAY_SIZE(arr) (sizeof(arr) / sizeof(arr[0]))
-
-#define SHELL_FOR_EACH_COMMAND(command) \
-  for (const sShellCommand *command = g_shell_commands; \
-    command < &g_shell_commands[g_num_shell_commands]; \
-    ++command)
-
-
-static int prv_issue_breakpoint(int argc, char *argv[]) {
-  __asm("bkpt 1");
-  return 0;
-}
-
-static int prv_dump_fpb_config(int argc, char *argv[]) {
-  fpb_dump_breakpoint_config();
-  return 0;
-}
-
-static int prv_fpb_set_breakpoint(int argc, char *argv[]) {
-  if (argc < 3) {
-    logp("Expected [Comp Id] [Address]");
-    return -1;
-  }
-
-  size_t comp_id = strtoul(argv[1], NULL, 0x0);
-  uint32_t addr = strtoul(argv[2], NULL, 0x0);
-
-  bool success = fpb_set_breakpoint(comp_id, addr);
-  logp("Set breakpoint on address 0x%x in FP_COMP[%d] %s", addr,
-              (int)comp_id, success ? "Succeeded" : "Failed");
-
-  return success ? 0 : -1;
-}
-
-static int prv_debug_monitor_enable(int argc, char *argv[]) {
-  debug_monitor_enable();
-  return 0;
-}
-
-static int prv_call_dummy_funcs(int argc, char *argv[]) {
-  for (size_t i = 0; i < dummy_num; i++) {
-    s_dummy_funcs[i].func();
-  }
-  return 0;
-}
-
-static int prv_dump_dummy_funcs(int argc, char *argv[]) {
-  for (size_t i = 0; i < dummy_num; i++) {
-    const sDummyFunction *d = &s_dummy_funcs[i];
-    // physical address is function address with thumb bit removed
-    volatile uint32_t *addr = (uint32_t *)(((uint32_t)d->func) & ~0x1);
-    logp("%s: Starts at 0x%x. First Instruction = 0x%x", d->name, addr, *addr);
-  }
-
-  return 0;
-}
-
-static const sShellCommand s_shell_commands[] = {
-  {"bkpt", prv_issue_breakpoint, "Issue a Breakpoint Instruction" },
-  {"debug_mon_en", prv_debug_monitor_enable, "Enable Monitor Debug Mode" },
-  {"fpb_dump", prv_dump_fpb_config, "Dump Active FPB Settings"},
-  {"fpb_set_breakpoint", prv_fpb_set_breakpoint, "Set Breakpoint [Comp Id] [Address]"},
-  {"call_dummy_funcs", prv_call_dummy_funcs, "Invoke dummy functions"},
-  {"dump_dummy_funcs", prv_dump_dummy_funcs, "Print first instruction of each dummy function"},
-  {"help", shell_help_handler, "Lists all commands"},
-};
-
-const sShellCommand *const g_shell_commands = s_shell_commands;
-const size_t g_num_shell_commands = ARRAY_SIZE(s_shell_commands);
 
 static volatile struct {
   size_t read_idx;
@@ -85,6 +18,36 @@ static volatile struct {
 } s_uart_buffer = {
   .num_bytes = 0,
 };
+
+void uart_byte_received_cb(uint8_t* buf, uint16_t size)
+{
+  if (s_uart_buffer.num_bytes >= sizeof(s_uart_buffer.buf)) {
+    return; // drop, out of space
+  }
+
+  int i=0, j = s_uart_buffer.read_idx;
+  while (i<size) {
+	s_uart_buffer.buf[j++]= buf[i++];
+  }
+
+  s_uart_buffer.num_bytes += size;
+}
+
+bool shell_getchar(char *c_out) 
+{
+  if (s_uart_buffer.num_bytes == 0) {
+    return false;
+  }
+
+  char c = s_uart_buffer.buf[s_uart_buffer.read_idx];
+
+  __disable_irq();
+  s_uart_buffer.read_idx = (s_uart_buffer.read_idx + 1) % sizeof(s_uart_buffer.buf);
+  s_uart_buffer.num_bytes--;
+  __enable_irq();
+  *c_out = c;
+  return true;
+}
 
 static struct ShellContext {
   int (*send_char)(char c);
@@ -103,7 +66,7 @@ static void prv_send_char(char c) {
   s_shell.send_char(c);
 }
 
-static void prv_echo(char c) {
+void prv_echo(char c) {
   if ('\n' == c) {
     prv_send_char('\r');
     prv_send_char('\n');
@@ -129,7 +92,7 @@ static void prv_reset_rx_buffer(void) {
   s_shell.rx_size = 0;
 }
 
-static void prv_echo_str(const char *str) {
+void prv_echo_str(const char *str) {
   for (const char *c = str; *c != '\0'; ++c) {
     prv_echo(*c);
   }
@@ -219,43 +182,8 @@ void shell_put_line(const char *str)
 }
 
 
-int shell_help_handler(int argc, char *argv[])
-{
-  SHELL_FOR_EACH_COMMAND(command) {
-    prv_echo_str(command->command);
-    prv_echo_str(": ");
-    prv_echo_str(command->help);
-    prv_echo('\n');
-  }
-  return 0;
-}
 
-void uart_tx_blocking(void * buf, size_t buf_len)
-{
-	HAL_UART_Transmit(&huart1, (uint8_t *)buf, (uint16_t)buf_len, ~0);
-}
 
-static void prv_log(const char *fmt, va_list *args) 
-{
-  char log_buf[256];
-  const size_t size = vsnprintf(log_buf, sizeof(log_buf) - 1, fmt, *args);
-  log_buf[size] = '\n';
-  uart_tx_blocking(log_buf, size + 1);
-}
-
-void logp(const char *fmt, ...) 
-{
-  va_list args;
-  va_start(args, fmt);
-  prv_log(fmt, &args);
-  va_end(args);
-}
-
-static int prv_console_putc(char c)
-{
-  uart_tx_blocking(&c, sizeof(c));
-  return 1;
-}
 
 void shell_boot(const sShellImpl *impl)
 {
@@ -267,45 +195,15 @@ void shell_boot(const sShellImpl *impl)
 void shell_processing_loop(void)
 {
   const sShellImpl shell_impl = {
-    .send_char = prv_console_putc,
+    .send_char = shell_putc,
   };
   shell_boot(&shell_impl);
 
   while (1) {
     char c;
-    if (shell_port_getchar(&c)) {
+    if (shell_getchar(&c)) {
       shell_receive_char(c);
     }
   }
-}
-
-void uart_byte_received_cb(uint8_t* buf, uint16_t size)
-{
-  if (s_uart_buffer.num_bytes >= sizeof(s_uart_buffer.buf)) {
-    return; // drop, out of space
-  }
-
-  int i=0, j = s_uart_buffer.read_idx;
-  while (i<size) {
-	s_uart_buffer.buf[j++]= buf[i++];
-  }
-
-  s_uart_buffer.num_bytes += size;
-}
-
-bool shell_port_getchar(char *c_out) 
-{
-  if (s_uart_buffer.num_bytes == 0) {
-    return false;
-  }
-
-  char c = s_uart_buffer.buf[s_uart_buffer.read_idx];
-
-  __disable_irq();
-  s_uart_buffer.read_idx = (s_uart_buffer.read_idx + 1) % sizeof(s_uart_buffer.buf);
-  s_uart_buffer.num_bytes--;
-  __enable_irq();
-  *c_out = c;
-  return true;
 }
 
