@@ -17,7 +17,7 @@ You should make sure you have already install these tools before start this proj
 - make
 - python3
 - [pyocd](https://github.com/pyocd/pyOCD)
-- [arm-none-eabi-gcc](https://askubuntu.com/questions/1031103/how-can-i-install-gdb-arm-none-eabi-on-ubuntu-18-04-bionic-beaver)
+- [arm-none-eabi-gcc](https://developer.arm.com/tools-and-software/open-source-software/developer-tools/gnu-toolchain/gnu-rm/downloads)
 
 There are other tools are recommended:
 
@@ -65,7 +65,7 @@ It will compile and load the elf file to the chip flash.
 ## Start Shell
 Just type:
 ```shell
-picocomm /dev/ttyUSB0 -b115200 --omapcrcrlf
+picocomm /dev/ttyUSB0 -b115200 --omap crcrlf
 ```
 > Note: The `/dev/ttyUSB0` is the uart port on my system. You should replace it with yours.
 

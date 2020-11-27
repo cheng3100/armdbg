@@ -1,49 +1,3 @@
-/**
-  ******************************************************************************
-  * @file    system_stm32f1xx.c
-  * @author  MCD Application Team
-  * @brief   CMSIS Cortex-M3 Device Peripheral Access Layer System Source File.
-  * 
-  * 1.  This file provides two functions and one global variable to be called from 
-  *     user application:
-  *      - SystemInit(): Setups the system clock (System clock source, PLL Multiplier
-  *                      factors, AHB/APBx prescalers and Flash settings). 
-  *                      This function is called at startup just after reset and 
-  *                      before branch to main program. This call is made inside
-  *                      the "startup_stm32f1xx_xx.s" file.
-  *
-  *      - SystemCoreClock variable: Contains the core clock (HCLK), it can be used
-  *                                  by the user application to setup the SysTick 
-  *                                  timer or configure other parameters.
-  *                                     
-  *      - SystemCoreClockUpdate(): Updates the variable SystemCoreClock and must
-  *                                 be called whenever the core clock is changed
-  *                                 during program execution.
-  *
-  * 2. After each device reset the HSI (8 MHz) is used as system clock source.
-  *    Then SystemInit() function is called, in "startup_stm32f1xx_xx.s" file, to
-  *    configure the system clock before to branch to main program.
-  *
-  * 4. The default value of HSE crystal is set to 8 MHz (or 25 MHz, depending on
-  *    the product used), refer to "HSE_VALUE". 
-  *    When HSE is used as system clock source, directly or through PLL, and you
-  *    are using different crystal you have to adapt the HSE value to your own
-  *    configuration.
-  *        
-  ******************************************************************************
-  * @attention
-  *
-  * <h2><center>&copy; Copyright (c) 2017 STMicroelectronics.
-  * All rights reserved.</center></h2>
-  *
-  * This software component is licensed by ST under BSD 3-Clause license,
-  * the "License"; You may not use this file except in compliance with the
-  * License. You may obtain a copy of the License at:
-  *                        opensource.org/licenses/BSD-3-Clause
-  *
-  ******************************************************************************
-  */
-
 /** @addtogroup CMSIS
   * @{
   */
@@ -405,4 +359,3 @@ void SystemInit_ExtMemCtl(void)
 /**
   * @}
   */    
-/************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/
