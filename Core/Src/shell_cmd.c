@@ -36,6 +36,11 @@ static int prv_debug_monitor_enable(int argc, char *argv[]) {
   return 0;
 }
 
+static int prv_debug_monitor_disable(int argc, char *argv[]) {
+  debug_monitor_disable();
+  return 0;
+}
+
 static int prv_call_dummy_funcs(int argc, char *argv[]) {
   for (size_t i = 0; i < dummy_num; i++) {
     s_dummy_funcs[i].func();
@@ -68,6 +73,7 @@ static int shell_help_handler(int argc, char *argv[])
 static const sShellCommand s_shell_commands[] = {
   {"bkpt", prv_issue_breakpoint, "Issue a Breakpoint Instruction" },
   {"debug_mon_en", prv_debug_monitor_enable, "Enable Monitor Debug Mode" },
+  {"debug_mon_off", prv_debug_monitor_disable, "Disable Monitor Debug Mode" },
   {"fpb_dump", prv_dump_fpb_config, "Dump Active FPB Settings"},
   {"fpb_set_breakpoint", prv_fpb_set_breakpoint, "Set Breakpoint [Comp Id] [Address]"},
   {"call_dummy_funcs", prv_call_dummy_funcs, "Invoke dummy functions"},

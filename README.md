@@ -70,3 +70,7 @@ picocomm /dev/ttyUSB0 -b115200 --omap crcrlf
 > Note: The `/dev/ttyUSB0` is the uart port on my system. You should replace it with yours.
 
 You can type `help` in the shell to see the available command.
+
+# Acknowledgements
+
+This project is inspired by the blog [interrupt](https://interrupt.memfault.com/blog/cortex-m-debug-monitor). I learn a lot from here. Thanks!

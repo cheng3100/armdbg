@@ -1,5 +1,4 @@
 /**
-  *************** (C) COPYRIGHT 2017 STMicroelectronics ************************
   * @file      startup_stm32f103xe.s
   * @author    MCD Application Team
   * @brief     STM32F103xE Devices vector table for Atollic toolchain.
